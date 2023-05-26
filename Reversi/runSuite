@@ -1,0 +1,119 @@
+#!/bin/bash
+
+# check if the number of arguments is correct
+if [ ${#} -ne 3 ]; then
+  echo "Error: argument missing" >&2
+  exit 1
+fi
+
+# check if suite-file exist and readable
+if [ ! -f "$1" ]; then
+  echo "Error: suite-file missing" >&2
+  exit 1
+elif [ ! -r "$1" ]; then
+  echo "Error: suite-file is not readable" >&2
+  exit 1
+fi
+
+# check if programToTest exist and executable
+if [ ! -x "$2" ]; then
+  echo "Error: the program to test is not executable" >&2
+  exit 1
+fi
+
+# check if sampleProgram exist and executable
+if [ ! -x "$3" ]; then
+  echo "Error: the sample program is not executable" >&2
+  exit 1
+fi
+
+
+flag=0
+flag2=0
+
+display () {
+	echo "Test failed: $1"
+	echo "Args:"
+	if [ -s ${1}.args ]; then
+		echo "$(cat ${1}.args)"
+	fi
+	echo "Input:"
+	if [ -s ${1}.in ]; then
+		echo "$(cat ${1}.in)"
+	fi
+	echo "Expected:"
+	if [ -s ${3} ]; then
+                echo "$(cat ${3})"
+        fi
+	echo "Actual:"
+	if [ -s ${2} ]; then
+                echo "$(cat ${2})"
+        fi
+}
+
+for name in $(cat "$1"); do
+	# Create a temporary file for your program's output
+	temp=$(mktemp tmp.XXXXXX --tmpdir=/tmp)
+    # Create a temporary file for example program's output
+	temp_example=$(mktemp tmp.XXXXXX --tmpdir=/tmp)
+
+    # if the args file doesn't exist
+	if [ ! -e ${name}.args ]; then
+        # if the args !e ; in !e
+		if [ ! -e ${name}.in ]; then
+			$2 > $temp
+            $3 > $temp_example
+		else
+            # if the args !e; in e + !r
+			if [ ! -r ${name}.in ]; then
+                flag=1
+                flag2=1
+                echo "Error: In file ${name} is not readable" >&2
+            # if the args !e; in e + r
+            else
+                $2 < ${name}.in > $temp
+                $3 < ${name}.in > $temp_example
+			fi
+        fi
+    # if the args file exist
+	else
+        # args e + !r
+		if [ ! -r ${name}.args ]; then
+			flag=1
+			flag2=1
+			echo "Error: Args file ${name} is not readable" >&2
+		else
+            # args e + r; in !e
+			if [ ! -e ${name}.in ]; then
+                $2 $(cat ${name}.args) > $temp
+                $3 $(cat ${name}.args) > $temp_example
+            else
+                # args e + r; in e + !r
+                if [ ! -r ${name}.in ]; then
+                    flag=1
+                    flag2=1
+                    echo "Error: In file ${name} is not readable" >&2
+                # args e + r; in e + r
+                else
+                    $2 $(cat ${name}.args)  < ${name}.in > $temp
+                    $3 $(cat ${name}.args)  < ${name}.in > $temp_example
+                fi
+            fi
+		fi
+	fi
+
+	
+	if [ $flag2 == 0 ]; then
+		diff $temp_example  $temp > /dev/null
+		if [ $? -ne 0 ]; then
+			display ${name} $temp $temp_example
+		fi
+	fi
+	rm $temp
+    rm $temp_example
+	flag2=0
+done
+
+if [ $flag == 1 ]; then
+	exit 1
+fi
